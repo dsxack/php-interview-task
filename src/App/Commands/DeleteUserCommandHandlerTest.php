@@ -28,12 +28,8 @@ class DeleteUserCommandHandlerTest extends TestCase {
             ->expects($this->once())
             ->method('update')
             ->willReturnCallback(function ($id, $callback) use ($user) {
-                $callback(User::new(
-                    new Name('johndoe1'),
-                    new Email('johndoe1@domain.com'),
-                    DateTime::now(),
-                    new Notes('test notes'),
-                ));
+                $callback($user);
+                $this->assertNotNull($user->timestamps()->deletedAt());
             });
 
         $loggerMock = $this->createMock(Logger::class);
