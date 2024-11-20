@@ -3,33 +3,42 @@
 namespace DmitriySmotrov\Interview\App\Commands;
 
 use DmitriySmotrov\Interview\Adapters\FileLogger;
-use DmitriySmotrov\Interview\Adapters\InMemoryUserRepository;
+use DmitriySmotrov\Interview\App\Services\Logger;
 use DmitriySmotrov\Interview\Domain\User\DateTime;
 use DmitriySmotrov\Interview\Domain\User\Email;
+use DmitriySmotrov\Interview\Domain\User\ID;
 use DmitriySmotrov\Interview\Domain\User\Name;
 use DmitriySmotrov\Interview\Domain\User\Notes;
 use DmitriySmotrov\Interview\Domain\User\Repository;
+use DmitriySmotrov\Interview\Domain\User\Timestamps;
 use DmitriySmotrov\Interview\Domain\User\User;
 use PHPUnit\Framework\TestCase;
 
 class DeleteUserCommandHandlerTest extends TestCase {
     public function testHandle() {
-        $users = new InMemoryUserRepository();
-        $user = User::new(
+        $user = User::fromStorage(
+            new ID(1),
             new Name('johndoe1'),
             new Email('johndoe1@domain.com'),
-            DateTime::now(),
+            Timestamps::fromStorage(DateTime::now(), null),
             new Notes('test notes'),
         );
-        $users->create($user);
 
-        $handler = $this->newHandler($users);
+        $repoMock = $this->createMock(Repository::class);
+        $repoMock
+            ->expects($this->once())
+            ->method('update')
+            ->willReturnCallback(function ($id, $callback) use ($user) {
+                $callback(User::new(
+                    new Name('johndoe1'),
+                    new Email('johndoe1@domain.com'),
+                    DateTime::now(),
+                    new Notes('test notes'),
+                ));
+            });
 
-        $this->assertNull($user->timestamps()->deletedAt());
+        $handler = $this->newHandler($repoMock);
         $handler->handle(new DeleteUserCommand($user->id()));
-
-        $user = $users->find($user->id());
-        $this->assertNotNull($user->timestamps()->deletedAt());
     }
 
     private function newHandler(Repository $users): DeleteUserCommandHandler {
