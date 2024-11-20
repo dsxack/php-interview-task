@@ -49,6 +49,7 @@ class CreateUserCommandHandler {
             $command->notes()
         );
         $this->users->create($user);
+        $this->logger->log("User with ID {$user->id()->toInteger()} created");
 
         return $user->id();
     }

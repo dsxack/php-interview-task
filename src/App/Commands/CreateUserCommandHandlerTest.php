@@ -27,8 +27,9 @@ class CreateUserCommandHandlerTest extends TestCase {
 
         $loggerMock = $this->createMock(Logger::class);
         $loggerMock
-            ->expects($this->never())
-            ->method('log');
+            ->expects($this->once())
+            ->method('log')
+            ->with("User with ID 5 created");
 
         $userInfoVerifierMock = $this->createMock(UserInfoVerifier::class);
         $userInfoVerifierMock
