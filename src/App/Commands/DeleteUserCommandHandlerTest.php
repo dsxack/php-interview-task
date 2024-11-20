@@ -2,7 +2,6 @@
 
 namespace DmitriySmotrov\Interview\App\Commands;
 
-use DmitriySmotrov\Interview\Adapters\FileLogger;
 use DmitriySmotrov\Interview\App\Services\Logger;
 use DmitriySmotrov\Interview\Domain\User\DateTime;
 use DmitriySmotrov\Interview\Domain\User\Email;
@@ -37,13 +36,13 @@ class DeleteUserCommandHandlerTest extends TestCase {
                 ));
             });
 
-        $handler = $this->newHandler($repoMock);
-        $handler->handle(new DeleteUserCommand($user->id()));
-    }
+        $loggerMock = $this->createMock(Logger::class);
+        $loggerMock
+            ->expects($this->once())
+            ->method('log')
+            ->with("User with ID 1 deleted");
 
-    private function newHandler(Repository $users): DeleteUserCommandHandler {
-        $logFile = fopen('php://memory', 'w+');
-        $logger = new FileLogger($logFile);
-        return new DeleteUserCommandHandler($users, $logger);
+        $handler = new DeleteUserCommandHandler($repoMock, $loggerMock);
+        $handler->handle(new DeleteUserCommand($user->id()));
     }
 }
