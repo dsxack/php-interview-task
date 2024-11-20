@@ -2,38 +2,69 @@
 
 namespace DmitriySmotrov\Interview\App\Commands;
 
-use DmitriySmotrov\Interview\Adapters\InMemoryUserEmailUntrustedDomains;
-use DmitriySmotrov\Interview\Adapters\InMemoryUserNameStopWords;
+use DmitriySmotrov\Interview\App\Services\Logger;
 use DmitriySmotrov\Interview\App\Services\UserInfoVerifier;
-use DmitriySmotrov\Interview\Domain\User\Domain;
 use DmitriySmotrov\Interview\Domain\User\Email;
+use DmitriySmotrov\Interview\Domain\User\ID;
 use DmitriySmotrov\Interview\Domain\User\Name;
 use DmitriySmotrov\Interview\Domain\User\Notes;
-use DmitriySmotrov\Interview\Adapters\InMemoryUserRepository;
-use DmitriySmotrov\Interview\Adapters\FileLogger;
 use DmitriySmotrov\Interview\Domain\User\Repository;
 use PHPUnit\Framework\TestCase;
 
 class CreateUserCommandHandlerTest extends TestCase {
     public function testHandle() {
-        $users = new InMemoryUserRepository();
-        $handler = $this->newHandler($users, [], []);
-        $id = $handler->handle(new CreateUserCommand(
+        $repoMock = $this->createMock(Repository::class);
+        $repoMock
+            ->expects($this->once())
+            ->method('create')
+            ->with($this->callback(function ($user) {
+                $this->assertEquals('johndoe1', $user->name()->toString());
+                $this->assertEquals('johndoe1@domain.com', $user->email()->toString());
+                $this->assertEquals('test notes', $user->notes()->toString());
+                $user->setID(new ID(5));
+                return true;
+            }));
+
+        $loggerMock = $this->createMock(Logger::class);
+        $loggerMock
+            ->expects($this->never())
+            ->method('log');
+
+        $userInfoVerifierMock = $this->createMock(UserInfoVerifier::class);
+        $userInfoVerifierMock
+            ->expects($this->once())
+            ->method('verify')
+            ->with(new Name('johndoe1'), new Email('johndoe1@domain.com'));
+
+        $handler = new CreateUserCommandHandler($repoMock, $userInfoVerifierMock, $loggerMock);
+        $resultId = $handler->handle(new CreateUserCommand(
             new Name('johndoe1'),
             new Email('johndoe1@domain.com'),
             new Notes('test notes'),
         ));
 
-        $this->assertEquals(1, $id->toInteger());
-
-        $user = $users->find($id);
-        $this->assertEquals('johndoe1', $user->name()->toString());
-        $this->assertEquals('johndoe1@domain.com', $user->email()->toString());
-        $this->assertEquals('test notes', $user->notes()->toString());
+        $this->assertEquals(5, $resultId->toInteger());
     }
 
     public function testHandleWithStopWordInUserName() {
-        $handler = $this->newHandler(new InMemoryUserRepository(), ['stopWord'], []);
+        $repoMock = $this->createMock(Repository::class);
+        $repoMock
+            ->expects($this->never())
+            ->method('create');
+
+        $userInfoVerifierMock = $this->createMock(UserInfoVerifier::class);
+        $userInfoVerifierMock
+            ->expects($this->once())
+            ->method('verify')
+            ->willThrowException(new UserNameContainsStopWordException());
+
+        $loggerMock = $this->createMock(Logger::class);
+        $loggerMock
+            ->expects($this->once())
+            ->method('log')
+            ->with("Attempt to create user with stop word in name johndoe1StopWord");
+
+        $handler = new CreateUserCommandHandler($repoMock, $userInfoVerifierMock, $loggerMock);
 
         $this->expectException(UserNameContainsStopWordException::class);
         $handler->handle(new CreateUserCommand(
@@ -44,23 +75,30 @@ class CreateUserCommandHandlerTest extends TestCase {
     }
 
     public function testHandleWithUntrustedDomain() {
-        $handler = $this->newHandler(new InMemoryUserRepository(), [], [new Domain('domain.com')]);
+        $repoMock = $this->createMock(Repository::class);
+        $repoMock
+            ->expects($this->never())
+            ->method('create');
+
+        $userInfoVerifierMock = $this->createMock(UserInfoVerifier::class);
+        $userInfoVerifierMock
+            ->expects($this->once())
+            ->method('verify')
+            ->willThrowException(new UserEmailUntrustedDomainException());
+
+        $loggerMock = $this->createMock(Logger::class);
+        $loggerMock
+            ->expects($this->once())
+            ->method('log')
+            ->with("Attempt to create user with untrusted domain johndoe1@domain.com");
+
+        $handler = new CreateUserCommandHandler($repoMock, $userInfoVerifierMock, $loggerMock);
 
         $this->expectException(UserEmailUntrustedDomainException::class);
         $handler->handle(new CreateUserCommand(
-            new Name('johndoe1StopWord'),
+            new Name('johndoe1'),
             new Email('johndoe1@domain.com'),
             new Notes('test notes'),
         ));
-    }
-
-    private function newHandler(Repository $users, array $stopWords, array $untrustedDomains): CreateUserCommandHandler {
-        $logFile = fopen('php://memory', 'w+');
-        $logger = new FileLogger($logFile);
-        $stopWords = new InMemoryUserNameStopWords($stopWords);
-        $untrustedDomain = new InMemoryUserEmailUntrustedDomains($untrustedDomains);
-        $userInfoVerifier = new UserInfoVerifier($untrustedDomain, $stopWords);
-
-        return new CreateUserCommandHandler($users, $userInfoVerifier, $logger);
     }
 }
